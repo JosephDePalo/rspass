@@ -12,12 +12,12 @@ use chacha20poly1305::{
 use chacha20poly1305::{Nonce, aead::generic_array::GenericArray};
 use rand::rngs::OsRng;
 
-struct MasterPassword {
+struct Encryptor {
     hash: String,
     cipher: ChaCha20Poly1305,
 }
 
-impl MasterPassword {
+impl Encryptor {
     fn new(password: &[u8]) -> Self {
         let salt = SaltString::generate(&mut OsRng);
 
@@ -33,8 +33,34 @@ impl MasterPassword {
 
         let aead = ChaCha20Poly1305::new(GenericArray::from_slice(&key_buf));
 
-        MasterPassword {
+        Encryptor {
             hash: password_hash,
+            cipher: aead,
+        }
+    }
+
+    fn from_hash(hash: String) -> Self {
+        let argon2 = Argon2::default();
+        let parsed_hash = PasswordHash::new(&hash).unwrap();
+
+        let salt = match parsed_hash.salt {
+            Some(s) => s,
+            None => panic!("no"),
+        };
+
+        let mut key_buf = [0u8; 32];
+        argon2
+            .hash_password_into(
+                &hash.as_bytes(),
+                &salt.as_bytes(),
+                &mut key_buf,
+            )
+            .unwrap();
+
+        let aead = ChaCha20Poly1305::new(GenericArray::from_slice(&key_buf));
+
+        Encryptor {
+            hash: hash,
             cipher: aead,
         }
     }
@@ -71,19 +97,23 @@ impl MasterPassword {
 }
 
 fn main() {
-    let passwd = MasterPassword::new(b"Epic");
+    // let encryptor = Encryptor::new(b"Epic");
 
-    println!("{:?}", passwd.hash);
-    println!("matches: {:?}", passwd.verify(b"Epi"));
+    let encryptor = Encryptor::from_hash(String::from(
+        "$argon2id$v=19$m=4096,t=3,p=1$LxPV/tLZi+tja6F2zEsBHw$Kp19ER6J0kN3oSzr06R9QQ202SinlYhPH5XPCS2RXYU",
+    ));
+
+    println!("{:?}", encryptor.hash);
+    println!("matches: {:?}", encryptor.verify(b"Epic"));
 
     let plaintext = b"The quick brown fox jumped over the lazy dog.";
 
-    let (nonce, ciphertext) = passwd.encrypt(plaintext);
+    let (nonce, ciphertext) = encryptor.encrypt(plaintext);
 
     let encoded = general_purpose::STANDARD.encode(&ciphertext);
     println!("Ciphertext: {}", encoded);
 
-    let decrypted = passwd.decrypt_as_utf8(&nonce, &ciphertext);
+    let decrypted = encryptor.decrypt_as_utf8(&nonce, &ciphertext);
 
     println!("Plaintext: {}", decrypted);
 }
