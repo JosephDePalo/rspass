@@ -4,11 +4,11 @@ use argon2::{
         PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
     },
 };
+use chacha20poly1305::aead::generic_array::GenericArray;
 use chacha20poly1305::{
     ChaCha20Poly1305,
     aead::{Aead, AeadCore, KeyInit},
 };
-use chacha20poly1305::{Nonce, aead::generic_array::GenericArray};
 use rand::rngs::OsRng;
 
 pub struct Encryptor {
@@ -72,22 +72,24 @@ impl Encryptor {
             .is_ok()
     }
 
-    pub fn encrypt(self: &Self, plaintext: &[u8]) -> (Nonce, Vec<u8>) {
+    pub fn encrypt(self: &Self, plaintext: &[u8]) -> ([u8; 12], Vec<u8>) {
         let nonce = ChaCha20Poly1305::generate_nonce(&mut OsRng);
 
         let ciphertext =
             self.cipher.encrypt(&nonce, plaintext.as_ref()).unwrap();
 
-        (nonce, ciphertext)
+        (*nonce.as_ref(), ciphertext)
     }
 
-    pub fn decrypt(self: &Self, nonce: &Nonce, ciphertext: &[u8]) -> Vec<u8> {
-        self.cipher.decrypt(&nonce, ciphertext.as_ref()).unwrap()
+    pub fn decrypt(self: &Self, nonce: [u8; 12], ciphertext: &[u8]) -> Vec<u8> {
+        self.cipher
+            .decrypt(&GenericArray::from(nonce), ciphertext.as_ref())
+            .unwrap()
     }
 
     pub fn decrypt_as_utf8(
         self: &Self,
-        nonce: &Nonce,
+        nonce: [u8; 12],
         ciphertext: &[u8],
     ) -> String {
         let decrypted = self.decrypt(nonce, ciphertext);
