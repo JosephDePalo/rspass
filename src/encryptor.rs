@@ -1,7 +1,7 @@
 use argon2::{
     Argon2,
     password_hash::{
-        self, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+        PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
     },
 };
 use chacha20poly1305::{
