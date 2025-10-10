@@ -1,3 +1,4 @@
+use argon2::password_hash::SaltString;
 use bincode::{Decode, Encode};
 use serde::{Deserialize, Serialize};
 
@@ -25,6 +26,10 @@ impl Vault {
     pub fn from_entries(entries: Vec<Entry>) -> Self {
         Vault { entries }
     }
+
+    pub fn add(self: &mut Self, entry: Entry) {
+        self.entries.push(entry);
+    }
 }
 
 impl Entry {
@@ -43,6 +48,7 @@ pub struct LockedVault {
     test_nonce: [u8; 12],
     vault_ciphertext: Vec<u8>,
     vault_nonce: [u8; 12],
+    pub salt: String,
 }
 
 impl LockedVault {
@@ -57,9 +63,11 @@ impl LockedVault {
             test_nonce,
             vault_ciphertext,
             vault_nonce,
+            salt: encryptor.salt.clone(),
         }
     }
 
+    // TODO: Change to Result from Option
     pub fn unlock_vault(self: &Self, encryptor: &Encryptor) -> Option<Vault> {
         let test_decrypted =
             encryptor.decrypt(self.test_nonce, &self.test_ciphertext);
@@ -73,5 +81,23 @@ impl LockedVault {
         let vault = serde_json::from_slice(&vault_bytes).unwrap();
 
         return Some(vault);
+    }
+
+    pub fn decrypt(self: &Self, password: &String) -> Vault {
+        let encryptor = Encryptor::new(password.as_bytes(), Some(&self.salt));
+        let unlocked_vault = match self.unlock_vault(&encryptor) {
+            Some(vault) => vault,
+            None => panic!("Couldn't unlock vault"),
+        };
+        unlocked_vault
+    }
+    pub fn encrypt_updated(
+        self: &Self,
+        password: &String,
+        vault: Vault,
+    ) -> Self {
+        let encryptor = Encryptor::new(password.as_bytes(), Some(&self.salt));
+        let locked_vault = LockedVault::from_vault(&encryptor, vault);
+        locked_vault
     }
 }

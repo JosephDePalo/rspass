@@ -1,24 +1,27 @@
 use argon2::{
     Argon2,
     password_hash::{
-        PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+        self, PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
     },
 };
-use chacha20poly1305::aead::generic_array::GenericArray;
 use chacha20poly1305::{
     ChaCha20Poly1305,
-    aead::{Aead, AeadCore, KeyInit},
+    aead::{Aead, AeadCore, KeyInit, generic_array::GenericArray},
 };
 use rand::rngs::OsRng;
 
 pub struct Encryptor {
     pub hash: String,
+    pub salt: String,
     cipher: ChaCha20Poly1305,
 }
 
 impl Encryptor {
-    pub fn new(password: &[u8]) -> Self {
-        let salt = SaltString::generate(&mut OsRng);
+    pub fn new(password: &[u8], salt: Option<&String>) -> Self {
+        let salt = match salt {
+            Some(slt) => SaltString::new(slt.as_str()).unwrap(),
+            None => SaltString::generate(&mut OsRng),
+        };
 
         let argon2 = Argon2::default();
 
@@ -34,6 +37,7 @@ impl Encryptor {
 
         Encryptor {
             hash: password_hash,
+            salt: salt.as_str().into(),
             cipher: aead,
         }
     }
@@ -59,7 +63,8 @@ impl Encryptor {
         let aead = ChaCha20Poly1305::new(GenericArray::from_slice(&key_buf));
 
         Encryptor {
-            hash: hash,
+            hash: hash.clone(),
+            salt: parsed_hash.salt.unwrap().to_string(),
             cipher: aead,
         }
     }
