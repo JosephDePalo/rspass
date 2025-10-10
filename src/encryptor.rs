@@ -1,3 +1,5 @@
+use crate::error::RspassError;
+
 use argon2::{
     Argon2,
     password_hash::{
@@ -17,38 +19,46 @@ pub struct Encryptor {
 }
 
 impl Encryptor {
-    pub fn new(password: &[u8], salt: Option<&String>) -> Self {
+    pub fn new(
+        password: &[u8],
+        salt: Option<&String>,
+    ) -> Result<Self, RspassError> {
         let salt = match salt {
-            Some(slt) => SaltString::new(slt.as_str()).unwrap(),
+            Some(slt) => SaltString::new(slt.as_str())
+                .map_err(|e| RspassError::HashError(e.to_string()))?,
             None => SaltString::generate(&mut OsRng),
         };
 
         let argon2 = Argon2::default();
 
-        let password_hash =
-            argon2.hash_password(password, &salt).unwrap().to_string();
+        let password_hash = argon2
+            .hash_password(password, &salt)
+            .map_err(|e| RspassError::HashError(e.to_string()))?
+            .to_string();
 
         let mut key_buf = [0u8; 32];
         argon2
             .hash_password_into(password, &salt.as_bytes(), &mut key_buf)
-            .unwrap();
+            .map_err(|e| RspassError::HashError(e.to_string()))?;
 
         let aead = ChaCha20Poly1305::new(GenericArray::from_slice(&key_buf));
 
-        Encryptor {
+        Ok(Encryptor {
             hash: password_hash,
             salt: salt.as_str().into(),
             cipher: aead,
-        }
+        })
     }
 
-    pub fn from_hash(hash: String) -> Self {
+    pub fn from_hash(hash: String) -> Result<Self, RspassError> {
         let argon2 = Argon2::default();
-        let parsed_hash = PasswordHash::new(&hash).unwrap();
+        let parsed_hash = PasswordHash::new(&hash)
+            .map_err(|e| RspassError::HashError(e.to_string()))?;
 
-        let salt = match parsed_hash.salt {
-            Some(s) => s,
-            None => panic!("no"),
+        let Some(salt) = parsed_hash.salt else {
+            return Err(RspassError::InvalidInputError(
+                "Could not get salt from parsed hash".into(),
+            ));
         };
 
         let mut key_buf = [0u8; 32];
@@ -58,15 +68,15 @@ impl Encryptor {
                 &salt.as_bytes(),
                 &mut key_buf,
             )
-            .unwrap();
+            .map_err(|e| RspassError::HashError(e.to_string()))?;
 
         let aead = ChaCha20Poly1305::new(GenericArray::from_slice(&key_buf));
 
-        Encryptor {
+        Ok(Encryptor {
             hash: hash.clone(),
-            salt: parsed_hash.salt.unwrap().to_string(),
+            salt: salt.to_string(),
             cipher: aead,
-        }
+        })
     }
 
     pub fn verify(self: &Self, password: &[u8]) -> bool {

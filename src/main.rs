@@ -30,51 +30,50 @@ enum Commands {
     Add,
 }
 
-fn prompt(prompt: &str) -> String {
+fn prompt(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
     print!("{}", prompt);
-    io::stdout().flush().unwrap(); // make sure prompt prints immediately
+    io::stdout().flush()?; // make sure prompt prints immediately
 
     let mut input = String::new();
-    io::stdin()
-        .read_line(&mut input)
-        .expect("Failed to read input");
-    input.trim().to_string()
+    io::stdin().read_line(&mut input)?;
+    Ok(input.trim().to_string())
 }
 
-fn main() {
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
 
-    let password =
-        rpassword::prompt_password("Enter decryption password: ").unwrap();
+    let password = rpassword::prompt_password("Enter decryption password: ")?;
     match cli.command {
         Commands::Show => {
-            let locked_vault = LockedVault::from_file(&cli.vault);
-            let vault = locked_vault.decrypt(&password);
+            let locked_vault = LockedVault::from_file(&cli.vault)?;
+            let vault = locked_vault.decrypt(&password)?;
             println!("Vault Contents: {:?}", vault);
         }
         Commands::New => {
             let locked_vault =
-                LockedVault::from_vault(Vault::new(), &password, None);
-            locked_vault.to_file(&cli.vault);
+                LockedVault::from_vault(Vault::new(), &password, None)?;
+            locked_vault.to_file(&cli.vault)?;
             println!("Created vault at {:?}", cli.vault);
         }
         Commands::Add => {
-            let locked_vault = LockedVault::from_file(&cli.vault);
-            let mut vault = locked_vault.decrypt(&password);
+            let locked_vault = LockedVault::from_file(&cli.vault)?;
+            let mut vault = locked_vault.decrypt(&password)?;
 
-            let entry_name = prompt("Name: ");
-            let entry_username = prompt("Username: ");
-            let entry_password =
-                rpassword::prompt_password("Password: ").unwrap();
+            let entry_name = prompt("Name: ")?;
+            let entry_username = prompt("Username: ")?;
+            let entry_password = rpassword::prompt_password("Password: ")?;
 
             let new_entry =
                 Entry::new(entry_name.clone(), entry_username, entry_password);
 
             vault.add(new_entry);
 
-            let updated_vault = locked_vault.encrypt_updated(&password, vault);
-            updated_vault.to_file(&cli.vault);
+            let updated_vault =
+                locked_vault.encrypt_updated(&password, vault)?;
+            updated_vault.to_file(&cli.vault)?;
             println!("Entry for '{}' added", entry_name);
         }
     }
+
+    Ok(())
 }
