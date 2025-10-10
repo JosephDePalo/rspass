@@ -3,7 +3,7 @@ use rpassword;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use cryptostuff::vault::{Entry, LockedVault, Vault};
+use rspass::vault::{Entry, LockedVault, Vault};
 
 /// A simple password vault encryption tool
 #[derive(Parser, Debug)]
