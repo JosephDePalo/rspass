@@ -1,14 +1,9 @@
-use cryptostuff::{
-    encryptor::Encryptor,
-    vault::{Entry, LockedVault, Vault},
-};
-
-use bincode::{self, config};
-use std::fs::{self, File};
+use clap::{Parser, Subcommand};
+use rpassword;
 use std::io::{self, Write};
 use std::path::PathBuf;
 
-use clap::{Parser, Subcommand};
+use cryptostuff::vault::{Entry, LockedVault, Vault};
 
 /// A simple password vault encryption tool
 #[derive(Parser, Debug)]
@@ -35,28 +30,6 @@ enum Commands {
     Add,
 }
 
-fn decrypt_vault(
-    file_path: &PathBuf,
-    password: &String,
-) -> (Vault, LockedVault) {
-    let bytes = fs::read(file_path).unwrap();
-    let (reading_locked_vault, _): (LockedVault, usize) =
-        bincode::decode_from_slice(&bytes, config::standard()).unwrap();
-    (reading_locked_vault.decrypt(password), reading_locked_vault)
-}
-
-fn new_vault(file_path: &PathBuf, password: &String) {
-    let vault = Vault::new();
-    let encryptor = Encryptor::new(password.as_bytes(), None);
-    let locked_vault = LockedVault::from_vault(&encryptor, vault);
-    let serialized_locked_vault =
-        bincode::encode_to_vec(&locked_vault, config::standard()).unwrap();
-
-    // Write to file
-    let mut writing_file = File::create(file_path).unwrap();
-    writing_file.write_all(&serialized_locked_vault).unwrap();
-}
-
 fn prompt(prompt: &str) -> String {
     print!("{}", prompt);
     io::stdout().flush().unwrap(); // make sure prompt prints immediately
@@ -71,30 +44,23 @@ fn prompt(prompt: &str) -> String {
 fn main() {
     let cli = Cli::parse();
 
-    let password;
+    let password =
+        rpassword::prompt_password("Enter decryption password: ").unwrap();
     match cli.command {
         Commands::Show => {
-            println!("Decrypting vault: {:?}", cli.vault);
-            password =
-                rpassword::prompt_password("Enter decryption password: ")
-                    .unwrap();
-            let (vault, _) = decrypt_vault(&cli.vault, &password);
+            let locked_vault = LockedVault::from_file(&cli.vault);
+            let vault = locked_vault.decrypt(&password);
             println!("Vault Contents: {:?}", vault);
         }
         Commands::New => {
-            password =
-                rpassword::prompt_password("Enter encryption password: ")
-                    .unwrap();
-            new_vault(&cli.vault, &password);
+            let locked_vault =
+                LockedVault::from_vault(Vault::new(), &password, None);
+            locked_vault.to_file(&cli.vault);
             println!("Created vault at {:?}", cli.vault);
         }
         Commands::Add => {
-            println!("Decrypting vault: {:?}", cli.vault);
-            password =
-                rpassword::prompt_password("Enter decryption password: ")
-                    .unwrap();
-            let (mut vault, locked_vault) =
-                decrypt_vault(&cli.vault, &password);
+            let locked_vault = LockedVault::from_file(&cli.vault);
+            let mut vault = locked_vault.decrypt(&password);
 
             let entry_name = prompt("Name: ");
             let entry_username = prompt("Username: ");
@@ -102,20 +68,13 @@ fn main() {
                 rpassword::prompt_password("Password: ").unwrap();
 
             let new_entry =
-                Entry::new(entry_name, entry_username, entry_password);
+                Entry::new(entry_name.clone(), entry_username, entry_password);
 
             vault.add(new_entry);
 
-            println!("Vault is now {:?}", vault);
             let updated_vault = locked_vault.encrypt_updated(&password, vault);
-
-            let serialized_locked_vault =
-                bincode::encode_to_vec(&updated_vault, config::standard())
-                    .unwrap();
-
-            // Write to file
-            let mut writing_file = File::create(cli.vault).unwrap();
-            writing_file.write_all(&serialized_locked_vault).unwrap();
+            updated_vault.to_file(&cli.vault);
+            println!("Entry for '{}' added", entry_name);
         }
     }
 }

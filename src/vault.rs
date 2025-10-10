@@ -1,5 +1,10 @@
-use argon2::password_hash::SaltString;
-use bincode::{Decode, Encode};
+use std::{
+    fs::{self, File},
+    io::Write,
+    path::PathBuf,
+};
+
+use bincode::{Decode, Encode, config};
 use serde::{Deserialize, Serialize};
 
 use crate::encryptor::Encryptor;
@@ -52,7 +57,12 @@ pub struct LockedVault {
 }
 
 impl LockedVault {
-    pub fn from_vault(encryptor: &Encryptor, vault: Vault) -> Self {
+    pub fn from_vault(
+        vault: Vault,
+        password: &String,
+        salt: Option<&String>,
+    ) -> Self {
+        let encryptor = Encryptor::new(password.as_bytes(), salt);
         let (test_nonce, test_ciphertext) = encryptor.encrypt(TEST_PLAINTEXT);
         let vault_plaintext = serde_json::to_vec(&vault).unwrap();
         let (vault_nonce, vault_ciphertext) =
@@ -67,12 +77,12 @@ impl LockedVault {
         }
     }
 
-    // TODO: Change to Result from Option
-    pub fn unlock_vault(self: &Self, encryptor: &Encryptor) -> Option<Vault> {
+    pub fn decrypt(self: &Self, password: &String) -> Vault {
+        let encryptor = Encryptor::new(password.as_bytes(), Some(&self.salt));
         let test_decrypted =
             encryptor.decrypt(self.test_nonce, &self.test_ciphertext);
         if test_decrypted != TEST_PLAINTEXT {
-            return None;
+            panic!("Bad pass");
         }
 
         let vault_bytes =
@@ -80,24 +90,29 @@ impl LockedVault {
 
         let vault = serde_json::from_slice(&vault_bytes).unwrap();
 
-        return Some(vault);
-    }
-
-    pub fn decrypt(self: &Self, password: &String) -> Vault {
-        let encryptor = Encryptor::new(password.as_bytes(), Some(&self.salt));
-        let unlocked_vault = match self.unlock_vault(&encryptor) {
-            Some(vault) => vault,
-            None => panic!("Couldn't unlock vault"),
-        };
-        unlocked_vault
+        vault
     }
     pub fn encrypt_updated(
         self: &Self,
         password: &String,
         vault: Vault,
     ) -> Self {
-        let encryptor = Encryptor::new(password.as_bytes(), Some(&self.salt));
-        let locked_vault = LockedVault::from_vault(&encryptor, vault);
-        locked_vault
+        LockedVault::from_vault(vault, password, Some(&self.salt))
+    }
+
+    pub fn from_file(file_path: &PathBuf) -> Self {
+        let bytes = fs::read(file_path).unwrap();
+        let (reading_locked_vault, _): (LockedVault, usize) =
+            bincode::decode_from_slice(&bytes, config::standard()).unwrap();
+        reading_locked_vault
+    }
+
+    pub fn to_file(self: &Self, file_path: &PathBuf) {
+        let serialized_locked_vault =
+            bincode::encode_to_vec(self, config::standard()).unwrap();
+
+        // Write to file
+        let mut writing_file = File::create(file_path).unwrap();
+        writing_file.write_all(&serialized_locked_vault).unwrap();
     }
 }
