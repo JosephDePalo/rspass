@@ -11,12 +11,12 @@ use crate::{encryptor::Encryptor, error::RspassError};
 
 pub const TEST_PLAINTEXT: &[u8] = b"Vault OK";
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Vault {
     entries: Vec<Entry>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Entry {
     name: String,
     username: String,
@@ -34,6 +34,15 @@ impl Vault {
 
     pub fn add(self: &mut Self, entry: Entry) {
         self.entries.push(entry);
+    }
+
+    pub fn get(self: &Self, name: &str) -> Option<&Entry> {
+        for entry in &self.entries {
+            if entry.name == name {
+                return Some(entry);
+            }
+        }
+        return None;
     }
 }
 
