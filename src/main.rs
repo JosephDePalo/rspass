@@ -41,7 +41,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                             line.split_whitespace().collect();
                         args.insert(0, "");
                         let cli = Cli::parse_from(args);
-                        updated = handle_args(cli, &mut vault)?;
+                        if !updated {
+                            updated = handle_args(cli, &mut vault)?;
+                        }
                     }
                     Err(ReadlineError::Interrupted) => {
                         break;

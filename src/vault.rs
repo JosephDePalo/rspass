@@ -55,6 +55,17 @@ impl Vault {
         }
         return None;
     }
+
+    /// Removes an entry by name from the vault. If there are duplicate
+    /// entries, delete on ly the first one. Returns the removed entry.
+    pub fn del(self: &mut Self, name: &str) -> Option<Entry> {
+        if let Some(pos) = self.entries.iter().position(|ent| ent.name == name)
+        {
+            Some(self.entries.remove(pos))
+        } else {
+            None
+        }
+    }
 }
 
 impl Entry {

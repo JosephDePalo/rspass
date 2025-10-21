@@ -35,7 +35,13 @@ pub enum Commands {
     Repl,
 
     /// Get an entry
-    Get { name: String },
+    Get {
+        name: String,
+    },
+
+    Del {
+        name: String,
+    },
 }
 
 /// Takes an already decrypted vault and performs operations on it
@@ -67,6 +73,13 @@ pub fn handle_args(
         }
         Commands::Get { name } => match vault.get(name.as_str()) {
             Some(entry) => println!("{:?}", entry),
+            None => println!("'{}' not found", name),
+        },
+        Commands::Del { name } => match vault.del(name.as_str()) {
+            Some(entry) => {
+                println!("Deleted {:?}", entry);
+                has_updated = true;
+            }
             None => println!("'{}' not found", name),
         },
         Commands::New | Commands::Repl => {
