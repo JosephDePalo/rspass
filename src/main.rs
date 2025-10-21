@@ -2,7 +2,6 @@ use clap::{Parser, Subcommand};
 use rpassword;
 use rustyline::DefaultEditor;
 use rustyline::error::ReadlineError;
-use std::io::{self, Write};
 use std::path::PathBuf;
 
 use rspass::vault::{Entry, LockedVault, Vault};
@@ -13,117 +12,116 @@ use rspass::vault::{Entry, LockedVault, Vault};
 struct Cli {
     /// Path to the vault file
     #[arg(short, long, value_name = "FILE")]
-    vault: PathBuf,
+    vault: Option<PathBuf>,
 
-    /// Choose an action: encrypt or decrypt
+    /// Choose an action
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Parser, Debug)]
+struct ReplCli {
+    /// Choose an action
     #[command(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand, Debug)]
 enum Commands {
-    /// Decrypt and read the vault
+    /// Dump the vault
     Show,
 
     /// Create a new vault
     New,
 
     /// Add entry to vault
-    Add,
+    Add {
+        entry_name: String,
+        entry_username: String,
+        entry_password: Option<String>,
+    },
 
     /// Start REPL
     Repl,
+
+    /// Get an entry
+    Get { name: String },
 }
 
-fn prompt(prompt: &str) -> Result<String, Box<dyn std::error::Error>> {
-    print!("{}", prompt);
-    io::stdout().flush()?; // make sure prompt prints immediately
+/// Takes an already decrypted vault and performs operations on it
+fn handle_args(
+    cli: Cli,
+    vault: &mut Vault,
+) -> Result<bool, Box<dyn std::error::Error>> {
+    let mut has_updated = false;
+    match cli.command {
+        Commands::Show => {
+            println!("{:?}", vault);
+        }
+        Commands::Add {
+            entry_name,
+            entry_username,
+            entry_password,
+        } => {
+            let pass = match entry_password {
+                Some(p) => p,
+                None => rpassword::prompt_password("Password: ")?,
+            };
 
-    let mut input = String::new();
-    io::stdin().read_line(&mut input)?;
-    Ok(input.trim().to_string())
+            let new_entry =
+                Entry::new(entry_name.clone(), entry_username, pass);
+
+            vault.add(new_entry);
+            has_updated = true;
+            println!("Entry for '{}' added", entry_name);
+        }
+        Commands::Get { name } => match vault.get(name.as_str()) {
+            Some(entry) => println!("{:?}", entry),
+            None => println!("'{}' not found", name),
+        },
+        Commands::New | Commands::Repl => {
+            eprintln!("Unsupported command in REPL mode");
+        }
+    }
+    Ok(has_updated)
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cli = Cli::parse();
-
+    let Some(vault_file) = &cli.vault.clone() else {
+        eprintln!("Need to provide a value for --vault");
+        return Err(Box::new(clap::Error::new(
+            clap::error::ErrorKind::MissingRequiredArgument,
+        )));
+    };
     let password = rpassword::prompt_password("Enter decryption password: ")?;
+
+    let locked_vault;
+    let mut vault;
+    let mut updated = false;
+
     match cli.command {
-        Commands::Show => {
-            let locked_vault = LockedVault::from_file(&cli.vault)?;
-            let vault = locked_vault.decrypt(&password)?;
-            println!("Vault Contents: {:?}", vault);
-        }
         Commands::New => {
-            let locked_vault =
+            locked_vault =
                 LockedVault::from_vault(Vault::new(), &password, None)?;
-            locked_vault.to_file(&cli.vault)?;
-            println!("Created vault at {:?}", cli.vault);
-        }
-        Commands::Add => {
-            let locked_vault = LockedVault::from_file(&cli.vault)?;
-            let mut vault = locked_vault.decrypt(&password)?;
-
-            let entry_name = prompt("Name: ")?;
-            let entry_username = prompt("Username: ")?;
-            let entry_password = rpassword::prompt_password("Password: ")?;
-
-            let new_entry =
-                Entry::new(entry_name.clone(), entry_username, entry_password);
-
-            vault.add(new_entry);
-
-            let updated_vault =
-                locked_vault.encrypt_updated(&password, vault)?;
-            updated_vault.to_file(&cli.vault)?;
-            println!("Entry for '{}' added", entry_name);
+            locked_vault.to_file(&vault_file)?;
+            println!("Created vault at {:?}", vault_file);
+            return Ok(());
         }
         Commands::Repl => {
-            let locked_vault = LockedVault::from_file(&cli.vault)?;
-            let mut vault = locked_vault.decrypt(&password)?;
+            locked_vault = LockedVault::from_file(&vault_file)?;
+            vault = locked_vault.decrypt(&password)?;
             let mut rl = DefaultEditor::new()?;
-            let mut updated = false;
 
             loop {
                 let readline = rl.readline(">> ");
                 match readline {
                     Ok(line) => {
-                        let mut parts = line.split_whitespace();
-                        let Some(subcmd) = parts.next() else {
-                            continue;
-                        };
-                        match subcmd {
-                            "show" => println!("{:?}", &vault),
-                            "add" => {
-                                let add_args: Vec<&str> = parts.collect();
-                                if add_args.len() != 3 {
-                                    println!("Bad usage of add");
-                                    continue;
-                                }
-                                vault.add(Entry::new(
-                                    add_args[0].to_string(),
-                                    add_args[1].to_string(),
-                                    add_args[2].to_string(),
-                                ));
-                                println!("Added entry '{}'", add_args[0]);
-                                updated = true;
-                            }
-                            "get" => {
-                                let get_args: Vec<&str> = parts.collect();
-                                if get_args.len() != 1 {
-                                    println!("Bad usage of get");
-                                    continue;
-                                }
-                                match vault.get(get_args[0]) {
-                                    Some(entry) => println!("{:?}", entry),
-                                    None => {
-                                        println!("'{}' not found", get_args[0])
-                                    }
-                                }
-                            }
-                            "quit" => break,
-                            _ => (),
-                        }
+                        let mut args: Vec<&str> =
+                            line.split_whitespace().collect();
+                        args.insert(0, "");
+                        let cli = Cli::parse_from(args);
+                        updated = handle_args(cli, &mut vault)?;
                     }
                     Err(ReadlineError::Interrupted) => {
                         break;
@@ -137,14 +135,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-
-            if updated {
-                let updated_vault =
-                    locked_vault.encrypt_updated(&password, vault)?;
-                updated_vault.to_file(&cli.vault)?;
-            }
+        }
+        _ => {
+            locked_vault = LockedVault::from_file(&vault_file)?;
+            vault = locked_vault.decrypt(&password)?;
+            updated = handle_args(cli, &mut vault)?;
         }
     }
 
+    if updated {
+        let updated_vault = locked_vault.encrypt_updated(&password, vault)?;
+        updated_vault.to_file(&vault_file)?;
+        println!("Wrote changes to {:?}", &vault_file);
+    }
     Ok(())
 }
