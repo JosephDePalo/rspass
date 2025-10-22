@@ -26,9 +26,13 @@ pub enum Commands {
 
     /// Add entry to vault
     Add {
-        entry_name: String,
-        entry_username: String,
-        entry_password: Option<String>,
+        name: String,
+
+        #[arg(short, long)]
+        username: String,
+
+        #[arg(short, long)]
+        password: Option<String>,
     },
 
     /// Start REPL
@@ -37,6 +41,9 @@ pub enum Commands {
     /// Get an entry
     Get {
         name: String,
+
+        #[arg(short, long)]
+        show_secrets: bool,
     },
 
     Del {
@@ -55,26 +62,30 @@ pub fn handle_args(
             println!("{}", vault);
         }
         Commands::Add {
-            entry_name,
-            entry_username,
-            entry_password,
+            name,
+            username,
+            password,
         } => {
-            let pass = match entry_password {
+            let pass = match password {
                 Some(p) => p,
                 None => rpassword::prompt_password("Password: ")?,
             };
 
-            let new_entry =
-                Entry::new(entry_name.clone(), entry_username, pass);
+            let new_entry = Entry::new(name.clone(), username, pass);
 
-            vault.add(new_entry);
-            has_updated = true;
-            println!("Entry for '{}' added", entry_name);
+            if let Err(e) = vault.add(new_entry) {
+                eprintln!("{}", e);
+            } else {
+                has_updated = true;
+                println!("Entry for '{}' added", name);
+            }
         }
-        Commands::Get { name } => match vault.get(name.as_str()) {
-            Some(entry) => println!("{}", entry),
-            None => println!("'{}' not found", name),
-        },
+        Commands::Get { name, show_secrets } => {
+            match vault.get(name.as_str()) {
+                Some(entry) => entry.print(show_secrets),
+                None => println!("'{}' not found", name),
+            }
+        }
         Commands::Del { name } => match vault.del(name.as_str()) {
             Some(entry) => {
                 println!("Deleted {}", entry);

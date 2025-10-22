@@ -42,8 +42,15 @@ impl Vault {
     }
 
     /// Add a new entry to the vault.
-    pub fn add(self: &mut Self, entry: Entry) {
+    pub fn add(self: &mut Self, entry: Entry) -> Result<(), RspassError> {
+        if self.entries.iter().any(|ent| ent.name == entry.name) {
+            return Err(RspassError::InvalidInputError(format!(
+                "Entry with name '{}' already exists",
+                entry.name
+            )));
+        }
         self.entries.push(entry);
+        Ok(())
     }
 
     /// Get an entry by name from the vault. If there are duplicate entries,
@@ -89,6 +96,19 @@ impl Entry {
             username,
             password,
         }
+    }
+
+    pub fn print(self: &Self, show_secrets: bool) {
+        println!("Name: {}", self.name);
+        println!("Username: {}", self.username);
+        println!(
+            "Password: {}",
+            if show_secrets {
+                self.password.as_str()
+            } else {
+                "REDACTED"
+            }
+        );
     }
 }
 
