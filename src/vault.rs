@@ -23,11 +23,11 @@ pub struct Vault {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Entry {
     /// Name for the entry.
-    name: String,
+    pub name: String,
     /// Username for the account.
-    username: String,
+    pub username: String,
     /// Password for the account.
-    password: String,
+    pub password: String,
 }
 
 impl Vault {

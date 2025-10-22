@@ -1,4 +1,5 @@
 use crate::vault::{Entry, Vault};
+use arboard::Clipboard;
 use clap::{Parser, Subcommand};
 use rpassword;
 use std::path::PathBuf;
@@ -18,13 +19,13 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Dump the vault
+    /// Dump the vault.
     Show,
 
-    /// Create a new vault
+    /// Create a new vault.
     New,
 
-    /// Add entry to vault
+    /// Add entry to vault.
     Add {
         name: String,
 
@@ -35,10 +36,10 @@ pub enum Commands {
         password: Option<String>,
     },
 
-    /// Start REPL
+    /// Start REPL.
     Repl,
 
-    /// Get an entry
+    /// Get an entry.
     Get {
         name: String,
 
@@ -46,9 +47,11 @@ pub enum Commands {
         show_secrets: bool,
     },
 
-    Del {
-        name: String,
-    },
+    /// Copy the password of an entry to the system clipboard.
+    Clip { name: String },
+
+    /// Delete an entry from the vault.
+    Del { name: String },
 }
 
 /// Takes an already decrypted vault and performs operations on it
@@ -83,7 +86,14 @@ pub fn handle_args(
         Commands::Get { name, show_secrets } => {
             match vault.get(name.as_str()) {
                 Some(entry) => entry.print(show_secrets),
-                None => println!("'{}' not found", name),
+                None => eprintln!("'{}' not found", name),
+            }
+        }
+        Commands::Clip { name } => {
+            let mut clipboard = Clipboard::new().unwrap();
+            match vault.get(name.as_str()) {
+                Some(entry) => clipboard.set_text(entry.password.as_str())?,
+                None => eprintln!("'{}' not found", name),
             }
         }
         Commands::Del { name } => match vault.del(name.as_str()) {
@@ -91,7 +101,7 @@ pub fn handle_args(
                 println!("Deleted {}", entry);
                 has_updated = true;
             }
-            None => println!("'{}' not found", name),
+            None => eprintln!("'{}' not found", name),
         },
         Commands::New | Commands::Repl => {
             eprintln!("Unsupported command in REPL mode");
