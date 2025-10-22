@@ -40,9 +40,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         let mut args: Vec<&str> =
                             line.split_whitespace().collect();
                         args.insert(0, "");
-                        let cli = Cli::parse_from(args);
+                        let Ok(cli) = Cli::try_parse_from(args) else {
+                            eprintln!("Invalid command");
+                            continue;
+                        };
                         if !updated {
                             updated = handle_args(cli, &mut vault)?;
+                        } else {
+                            handle_args(cli, &mut vault)?;
                         }
                     }
                     Err(ReadlineError::Interrupted) => {
