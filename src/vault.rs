@@ -1,4 +1,5 @@
 use std::{
+    fmt,
     fs::{self, File},
     io::Write,
     path::PathBuf,
@@ -68,6 +69,18 @@ impl Vault {
     }
 }
 
+impl fmt::Display for Vault {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let joined = self
+            .entries
+            .iter()
+            .map(|e| e.to_string())
+            .collect::<Vec<_>>()
+            .join(", ");
+        write!(f, "{}", joined)
+    }
+}
+
 impl Entry {
     /// Create a new entry.
     pub fn new(name: String, username: String, password: String) -> Self {
@@ -76,6 +89,12 @@ impl Entry {
             username,
             password,
         }
+    }
+}
+
+impl fmt::Display for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "(Name: {}, Username: {})", self.name, self.username)
     }
 }
 

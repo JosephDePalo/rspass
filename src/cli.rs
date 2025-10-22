@@ -52,7 +52,7 @@ pub fn handle_args(
     let mut has_updated = false;
     match cli.command {
         Commands::Show => {
-            println!("{:?}", vault);
+            println!("{}", vault);
         }
         Commands::Add {
             entry_name,
@@ -72,12 +72,12 @@ pub fn handle_args(
             println!("Entry for '{}' added", entry_name);
         }
         Commands::Get { name } => match vault.get(name.as_str()) {
-            Some(entry) => println!("{:?}", entry),
+            Some(entry) => println!("{}", entry),
             None => println!("'{}' not found", name),
         },
         Commands::Del { name } => match vault.del(name.as_str()) {
             Some(entry) => {
-                println!("Deleted {:?}", entry);
+                println!("Deleted {}", entry);
                 has_updated = true;
             }
             None => println!("'{}' not found", name),
